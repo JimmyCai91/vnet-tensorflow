@@ -41,7 +41,16 @@ class NiftiDataset(object):
       label_paths.append(os.path.join(self.data_dir,case,self.label_filename))
     '''
     import glob
-    image_paths = glob.glob(os.path.join(self.data_dir,'Volume','*.nii.gz'))
+    if 'training' in self.data_dir:
+      image_paths = glob.glob(os.path.join(self.data_dir.replace('/training',''),'Volume','*.nii.gz'))
+    else:
+      image_paths = glob.glob(os.path.join(self.data_dir.replace('/testing',''),'Volume','*.nii.gz'))
+    image_paths = sorted(image_paths)
+    if 'training' in self.data_dir:
+      image_paths = image_paths[:int(0.6*len(image_paths))]
+    else:
+      image_paths = image_paths[int(0.6*len(image_paths)):]
+
     label_paths = [image_name.replace('Volume','Label').replace('volume','label') for 
       image_name in image_paths]
 
