@@ -26,7 +26,7 @@ class NiftiDataset(object):
 
     # Init membership variables
     self.data_dir = data_dir
-    self.image_filename = image_filename
+    self.image_filename = image_filename 
     self.label_filename = label_filename
     self.transforms = transforms
     self.train = train
@@ -34,9 +34,16 @@ class NiftiDataset(object):
   def get_dataset(self):
     image_paths = []
     label_paths = []
+    # make a folder for each case, each folder contains a 'image.nii.gz' file and a 'label.nii.gz' file
+    '''
     for case in os.listdir(self.data_dir):
       image_paths.append(os.path.join(self.data_dir,case,self.image_filename))
       label_paths.append(os.path.join(self.data_dir,case,self.label_filename))
+    '''
+    import glob
+    image_paths = glob.glob(os.path.join(self.data_dir,'Volume','*.nii.gz'))
+    label_paths = [image_name.replace('Volume','Label').replace('volume','label') for 
+      image_name in image_paths]
 
     dataset = tf.data.Dataset.from_tensor_slices((image_paths,label_paths))
 
