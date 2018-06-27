@@ -71,35 +71,7 @@ def placeholder_inputs(input_batch_shape, output_batch_shape):
     return images_placeholder, labels_placeholder
 
 def dice_coe(output, target, loss_type='jaccard', axis=(1, 2, 3), smooth=1e-5):
-    """Soft dice (Sørensen or Jaccard) coefficient for comparing the similarity
-    of two batch of data, usually be used for binary image segmentation
-    i.e. labels are binary. The coefficient between 0 to 1, 1 means totally match.
 
-    Parameters
-    -----------
-    output : Tensor
-        A distribution with shape: [batch_size, ....], (any dimensions).
-    target : Tensor
-        The target distribution, format the same with `output`.
-    loss_type : str
-        ``jaccard`` or ``sorensen``, default is ``jaccard``.
-    axis : tuple of int
-        All dimensions are reduced, default ``[1,2,3]``.
-    smooth : float
-        This small value will be added to the numerator and denominator.
-            - If both output and target are empty, it makes sure dice is 1.
-            - If either output or target are empty (all pixels are background), dice = ```smooth/(small_value + smooth)``, then if smooth is very small, dice close to 0 (even the image values lower than the threshold), so in this case, higher smooth can have a higher dice.
-
-    Examples
-    ---------
-    >>> outputs = tl.act.pixel_wise_softmax(network.outputs)
-    >>> dice_loss = 1 - tl.cost.dice_coe(outputs, y_)
-
-    References
-    -----------
-    - `Wiki-Dice <https://en.wikipedia.org/wiki/Sørensen–Dice_coefficient>`__
-
-    """
     inse = tf.reduce_sum(output * target, axis=axis)
 
     if loss_type == 'jaccard':
@@ -137,7 +109,16 @@ def train():
 
             tf.summary.image("image", tf.transpose(images_log,[3,1,2,0]),max_outputs=FLAGS.patch_layer)
             tf.summary.image("label", tf.transpose(labels_log,[3,1,2,0]),max_outputs=FLAGS.patch_layer)
-
+        '''
+        import glob
+        imagelist = glob.glob(os.path.join(FLAGS.data_dir,'Volume','*.nii.gz'))
+        labellist = [imagename.replace('Volume','Label').replace('volume','label') for imagename in imagelist]
+        imagetrainlist = imagelist[:int(len(imagelist)/2)]
+        labeltrainlist = labellist[:int(len(imagelist)/2)]
+        imagetestlist  = imagelist[int(len(imagelist)/2):]
+        labeltestlist  = labellist[int(len(imagelist)/2):]
+        
+        '''
         # Get images and labels
         train_data_dir = os.path.join(FLAGS.data_dir,'training')
         test_data_dir = os.path.join(FLAGS.data_dir,'testing')
@@ -178,7 +159,7 @@ def train():
                 ]
 
             TestDataset = NiftiDataset.NiftiDataset(
-                data_dir=train_data_dir,
+                data_dir=test_data_dir,
                 image_filename=image_filename,
                 label_filename=label_filename,
                 transforms=testTransforms,
@@ -323,6 +304,14 @@ def train():
                 print("{}: Epoch {} starts".format(datetime.datetime.now(),epoch+1))
 
                 # training phase
+                '''
+                reader = sitk.ImageFileReader()
+                for imagepath, labelpath in zip(imagetrainlist,labeltrainlist):
+                    
+                    reader.SetFileName(imagepath)
+                    return reader.Execute()
+                '''
+
                 while True:
                     try:
                         [image, label] = sess.run(next_element_train)
@@ -330,7 +319,9 @@ def train():
                         image = image[:,:,:,:,np.newaxis]
                         label = label[:,:,:,:,np.newaxis]
                         
-                        train, summary = sess.run([train_op, summary_op], feed_dict={images_placeholder: image, labels_placeholder: label})
+                        train, train_loss, train_accuracy, train_jaccard, summary = sess.run(
+                            [train_op, loss_op, accuracy, jaccard, summary_op], feed_dict={images_placeholder: image, labels_placeholder: label})
+                        print("train loss: %.4f, accuracy: %.4f, jaccard: %.4f" % (train_loss, train_accuracy, train_jaccard))
                         train_summary_writer.add_summary(summary, global_step=tf.train.global_step(sess, global_step))
 
                     except tf.errors.OutOfRangeError:
@@ -343,20 +334,25 @@ def train():
                             latest_filename="checkpoint-latest")
                         print("{}: Saving checkpoint succeed".format(datetime.datetime.now()))
                         break
-                
                 # testing phase
                 print("{}: Training of epoch {} finishes, testing start".format(datetime.datetime.now(),epoch+1))
+                testJaccard = []
                 while True:
                     try:
                         [image, label] = sess.run(next_element_test)
 
                         image = image[:,:,:,:,np.newaxis]
                         label = label[:,:,:,:,np.newaxis]
-                        
-                        loss, summary = sess.run([loss_op, summary_op], feed_dict={images_placeholder: image, labels_placeholder: label})
+                        test_loss, test_accuracy, test_jaccard, summary = sess.run(
+                            [loss_op, accuracy, jaccard, summary_op], feed_dict={images_placeholder: image, labels_placeholder: label})
+                        print("test loss: %.4f, accuracy: %.4f, jaccard: %.4f" % (test_loss, test_accuracy, test_jaccard))
+                        testJaccard.append(test_jaccard)
+
+                        #loss, summary = sess.run([loss_op, summary_op], feed_dict={images_placeholder: image, labels_placeholder: label})
                         test_summary_writer.add_summary(summary, global_step=tf.train.global_step(sess, global_step))
 
                     except tf.errors.OutOfRangeError:
+                        print("mean testing Jaccard: {}".format(np.array(testJaccard).mean()))
                         break
 
         # close tensorboard summary writer

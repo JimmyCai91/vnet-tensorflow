@@ -45,22 +45,23 @@ class NiftiDataset(object):
       image_paths = glob.glob(os.path.join(self.data_dir.replace('/training',''),'Volume','*.nii.gz'))
     else:
       image_paths = glob.glob(os.path.join(self.data_dir.replace('/testing',''),'Volume','*.nii.gz'))
+    print self.data_dir, len(image_paths)
     image_paths = sorted(image_paths)
     if 'training' in self.data_dir:
       image_paths = image_paths[:int(0.6*len(image_paths))]
+      print 'load {} training cases'.format(len(image_paths))
     else:
       image_paths = image_paths[int(0.6*len(image_paths)):]
+      print 'load {} testing cases'.format(len(image_paths))
+    label_paths = [image_name.replace('Volume','Label').replace('volume','label') for image_name in image_paths]
 
-    label_paths = [image_name.replace('Volume','Label').replace('volume','label') for 
-      image_name in image_paths]
-
-    dataset = tf.data.Dataset.from_tensor_slices((image_paths,label_paths))
-
+    dataset = tf.contrib.data.Dataset.from_tensor_slices((image_paths,label_paths))
     dataset = dataset.map(lambda image_path, label_path: tuple(tf.py_func(
       self.input_parser, [image_path, label_path], [tf.float32,tf.int32])))
 
     self.dataset = dataset
     self.data_size = len(image_paths)
+
     return self.dataset
 
   def read_image(self,path):
@@ -70,14 +71,15 @@ class NiftiDataset(object):
 
   def input_parser(self,image_path, label_path):
     # read image and label
-    image = self.read_image(image_path.decode("utf-8"))
+    #image = self.read_image(image_path.decode("utf-8"))
+    image = self.read_image(image_path)
     if self.train:
-      label = self.read_image(label_path.decode("utf-8"))
+      #label = self.read_image(label_path.decode("utf-8"))
+      label = self.read_image(label_path)
     else:
       label = sitk.Image(image.GetSize(),sitk.sitkUInt32)
       label.SetOrigin(image.GetOrigin())
       label.SetSpacing(image.GetSpacing())
-
     sample = {'image':image, 'label':label}
 
     if self.transforms:
